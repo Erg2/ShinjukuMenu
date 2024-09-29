@@ -12,7 +12,7 @@ from selenium import webdriver
 #from selenium.webdriver.chrome.options import Options
 #from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
-
+from sys import platform
 
 ## TODO if we run into memory problems, try clearing the cache
 #driver.execute_cdp_cmd('Storage.clearDataForOrigin', {
@@ -21,23 +21,26 @@ from selenium.webdriver.common.by import By
 #})
 
 ## Hack transition - try scrolling right till page off screen, go to next page but scrolled way left and then scroll in?
-
+driver = None
 try:
 
-    chrome_options = webdriver.ChromeOptions()
-    chrome_options.add_experimental_option("useAutomationExtension", False)
-    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    driver = webdriver.Chrome(options=chrome_options)
+    if platform == 'win32':
+        chrome_options = webdriver.ChromeOptions()
+        chrome_options.add_experimental_option("useAutomationExtension", False)
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        driver = webdriver.Chrome(options=chrome_options)
+    else:
+        service = webdriver.ChromeService(executable_path='/usr/local/bin/geckodriver')
+        driver = webdriver.Firefox(service=service)
 
-    #driver = webdriver.Chrome()
     driver.get("https://www.shinjukustationvt.com")
+
     #print("title:", driver.title)
     pageHeight = driver.execute_script("return document.body.scrollHeight")
     pageWidth = driver.execute_script("return document.body.offsetWidth;")
 
     #print("Scroll pageHeight", pageHeight, " pageWidth", pageWidth)
 
-    #driver.find_element(By.XPATH, '/html/body').send_keys(Keys.F11)
     driver.fullscreen_window()
 
     menuDiv = driver.find_element(By.XPATH, '//h2[contains(text(), "Menu")]')
@@ -50,33 +53,43 @@ try:
 
     cls = "menu-select-labels"
 
-    preDelay = 2          # delay before scroll (if any)
+    # Set to nice reading speed
+    preDelay = 3          # delay before scroll (if any)
     postDelay = 3.5       # delay after scroll (if any) - note: if no scroll, delays for both
-
     scrollDelay = .01   # delay per vertical pixel
+
+    # set to faster debugging speed
+    #preDelay = .5          # delay before scroll (if any)
+    #postDelay = .5       # delay after scroll (if any) - note: if no scroll, delays for both
+    #scrollDelay = .005   # delay per vertical pixel
 
     # Get all the menu labels (== clickable buttons)
     menuList = driver.find_elements(By.CLASS_NAME, cls)
 
+    #print("Len menu list", len(menuList))
+
     menuOffset = menuList[0].location["y"]
 
-
+    # cycle through menu options forever
     while True:
 
-        # click on each menu
+        # click on each menu in turn, scrolling if necessary
+        menuNum = 0
         for menu in menuList:
-            #print("start menu")
-
-            menu.click()        # select menu
-            #print("Scroll to menu")
+            #print("jump to menu at offset", topOffset)
             scrollCmd = "window.scrollTo(0, "+ str(topOffset) +")"     # Jump to top of page
             driver.execute_script(scrollCmd)
-            time.sleep(preDelay)
 
+            #print("select menu", menuNum)
+            menu.click()        # select menu
+            menuNum += 1
 
+            time.sleep(preDelay)       # let readers start reading
+
+            # figure out if we need to scroll the menu, and if so, how far
             menuDiv = driver.find_element(By.CLASS_NAME, "menu-wrapper")
             #print("Menu size", menuDiv.size)
-            menuHeight = menuDiv.size["height"]
+            menuHeight = int(menuDiv.size["height"])    # float on Firefox
 
             winSize = driver.get_window_size()
             winHeight = winSize["height"]
@@ -84,6 +97,7 @@ try:
 
             currLine = topOffset
 
+            # if menu doesn't fit on the page, scroll it one pixel row at a time
             if winHeight < menuHeight + menuOffset:
                 #print("winHeight", winHeight, " < (menuHeight", menuHeight, " + menuOffset", menuOffset, ") = ", menuHeight + menuOffset)
                 #pageHeight - winSize["height"]
@@ -97,20 +111,8 @@ try:
                     time.sleep(scrollDelay)
                 currLine = (menuHeight + menuOffset) - winHeight
 
-            #else:
-            #    print("winHeight", winHeight, " >= (menuHeight", menuHeight, " + menuOffset", menuOffset, ")")
-            #print("Done menu")
-
             #print("PostDelay")
-            time.sleep(postDelay)
-
-            # Sideways doesn't work, dunno why not
-            # print("Scroll siceways 1 to ", pageWidth)
-            # for xx in range(1, pageWidth):
-            #     scrollCmd = "window.scrollTo("+str(xx)+"," + str(currLine) + ")"
-            #     print("scrollCmd", scrollCmd)
-            #     driver.execute_script(scrollCmd)
-            #     time.sleep(.01)
+            time.sleep(postDelay)       # let readers finish reading
 
         #print("done")
 
@@ -120,4 +122,6 @@ except:
     ex = sys.exception()
     traceback.print_exception(ex)
 
-driver.close()
+# if browser open, close it
+if not driver is None:
+    driver.close()
